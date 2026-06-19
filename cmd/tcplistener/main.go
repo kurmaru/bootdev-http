@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -41,10 +42,17 @@ func getLinesChannel(f io.ReadCloser) <-chan string {
 			buff := [8]byte{}
 			count, err := f.Read(buff[:])
 			if err != nil {
-				log.Fatalf("failed to read file :%v\n", err)
+				if curStr != "" {
+					ch <- curStr
+				}
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				fmt.Printf("error: %s\n", err.Error())
+				return
 			}
 
-			parts := strings.Split(string(buff[:]), "\n")
+			parts := strings.Split(string(buff[:count]), "\n")
 			for i, line := range parts {
 				curStr += line
 				if len(parts) > 1 && i < len(parts)-1 {
@@ -54,6 +62,7 @@ func getLinesChannel(f io.ReadCloser) <-chan string {
 			}
 
 			if count < 8 {
+				ch <- curStr
 				break
 			}
 		}
