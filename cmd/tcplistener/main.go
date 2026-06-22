@@ -1,12 +1,11 @@
 package main
 
 import (
-	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net"
-	"strings"
+
+	"github.com/kurmaru/bootdev-http/internal/request"
 )
 
 func main() {
@@ -24,49 +23,16 @@ func main() {
 		}
 
 		fmt.Printf("Connection accepted\n")
-		linesCh := getLinesChannel(conn)
-		for line := range linesCh {
-			fmt.Printf("%v\n", line)
+		req, err := request.RequestFromReader(conn)
+		if err != nil {
+			log.Fatalf("Parse from connection failed: %v\n", err)
 		}
+
+		fmt.Printf(
+			"Request line:\n- Method: %v\n- Target: %v\n- Version: %v\n",
+			req.RequestLine.Method,
+			req.RequestLine.RequestTarget,
+			req.RequestLine.HttpVersion,
+		)
 	}
-}
-
-func getLinesChannel(f io.ReadCloser) <-chan string {
-	ch := make(chan string)
-
-	go func() {
-		defer f.Close()
-		defer close(ch)
-		curStr := ""
-		for {
-			buff := [8]byte{}
-			count, err := f.Read(buff[:])
-			if err != nil {
-				if curStr != "" {
-					ch <- curStr
-				}
-				if errors.Is(err, io.EOF) {
-					break
-				}
-				fmt.Printf("error: %s\n", err.Error())
-				return
-			}
-
-			parts := strings.Split(string(buff[:count]), "\n")
-			for i, line := range parts {
-				curStr += line
-				if len(parts) > 1 && i < len(parts)-1 {
-					ch <- curStr
-					curStr = ""
-				}
-			}
-
-			if count < 8 {
-				ch <- curStr
-				break
-			}
-		}
-	}()
-
-	return ch
 }
