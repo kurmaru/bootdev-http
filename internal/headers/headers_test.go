@@ -80,3 +80,30 @@ func TestHeadersKey(t *testing.T) {
 	require.Error(t, err)
 	assert.False(t, done)
 }
+
+func TestHeadersDuplicated(t *testing.T) {
+	headers := NewHeaders()
+	data := []byte("Set-Person: lanes-loves-go\r\n")
+	n, done, err := headers.Parse(data)
+	require.NoError(t, err)
+	require.NotNil(t, headers)
+	require.Equal(t, "lanes-loves-go", headers["set-person"])
+	require.Equal(t, 28, n)
+	require.False(t, done)
+
+	data = []byte("Set-Person: prime-loves-zig\r\n")
+	n, done, err = headers.Parse(data)
+	require.NoError(t, err)
+	require.NotNil(t, headers)
+	require.Equal(t, "lanes-loves-go, prime-loves-zig", headers["set-person"])
+	require.Equal(t, 29, n)
+	require.False(t, done)
+
+	data = []byte("set-person: tj-loves-ocaml\r\n\r\n")
+	n, done, err = headers.Parse(data)
+	require.NoError(t, err)
+	require.NotNil(t, headers)
+	require.Equal(t, "lanes-loves-go, prime-loves-zig, tj-loves-ocaml", headers["set-person"])
+	require.Equal(t, 28, n)
+	require.False(t, done)
+}
