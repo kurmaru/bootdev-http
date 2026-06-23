@@ -34,5 +34,9 @@ func main() {
 			req.RequestLine.RequestTarget,
 			req.RequestLine.HttpVersion,
 		)
+		fmt.Println("Headers:")
+		for key, val := range req.Headers {
+			fmt.Printf("- %v: %v\n", key, val)
+		}
 	}
 }
