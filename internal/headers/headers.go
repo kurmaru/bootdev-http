@@ -33,7 +33,7 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 		return 0, false, err
 	}
 
-	h[key] = val
+	h.Set(key, val)
 
 	return len(header) + len(crlf), false, nil
 }
@@ -71,4 +71,8 @@ func validateHeaderKey(str string) bool {
 		}
 	}
 	return true
+}
+
+func (h Headers) Set(key, val string) {
+	h[strings.ToLower(key)] = val
 }
