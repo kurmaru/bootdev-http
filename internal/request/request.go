@@ -2,10 +2,10 @@
 package request
 
 import (
-	"bytes"
 	"errors"
 	"io"
-	"strings"
+
+	"github.com/kurmaru/bootdev-http/internal/headers"
 )
 
 const (
@@ -16,11 +16,13 @@ const (
 type RequestState int
 
 const (
-	Initialized RequestState = iota
-	Done
+	requestStateInitialized RequestState = iota
+	requestStateDone
+	requestStateParsingHeaders
 )
 
 type Request struct {
+	Headers     headers.Headers
 	RequestLine RequestLine
 	State       RequestState
 }
@@ -35,10 +37,11 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	curBuf := make([]byte, readBufSize)
 	readToIdx := 0
 	req := Request{
-		State: Initialized,
+		State:   requestStateInitialized,
+		Headers: headers.NewHeaders(),
 	}
 
-	for {
+	for req.State != requestStateDone {
 		if readToIdx == cap(curBuf) {
 			buf := make([]byte, cap(curBuf)*2)
 			copy(buf, curBuf)
@@ -48,7 +51,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		count, err := reader.Read(curBuf[readToIdx:])
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				req.State = Done
+				req.State = requestStateDone
 			} else {
 				return nil, err
 			}
@@ -60,58 +63,34 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 			return nil, err
 		}
 
+		// If parsed success, trim down the size of buf
 		if parsedCount > 0 {
-			readToIdx -= parsedCount
-			buf := make([]byte, readToIdx)
+			buf := make([]byte, max(len(curBuf), readBufSize))
 			copy(buf, curBuf[parsedCount:])
 			curBuf = buf
+			readToIdx -= parsedCount
 		}
 
-		if req.State == Done {
-			break
-		}
 	}
 
 	return &req, nil
 }
 
-func parseRequestLine(str []byte) (rq *RequestLine, consumed int, err error) {
-	idx := bytes.Index([]byte(str), []byte(crlf))
-	if idx == -1 {
-		return nil, 0, nil
-	}
-
-	return requestLineFromString(string(str[:idx]))
-}
-
-func requestLineFromString(str string) (rq *RequestLine, consumed int, err error) {
-	parts := strings.Split(str, " ")
-	if len(parts) != 3 {
-		return nil, 0, errors.New("invalid request line format")
-	}
-
-	method := parts[0]
-	target := parts[1]
-	httpVer := parts[2]
-
-	if method != strings.ToUpper(method) {
-		return nil, 0, errors.New("invalid method")
-	}
-
-	if httpVer != "HTTP/1.1" {
-		return nil, 0, errors.New("invalid HTTP version")
-	}
-
-	return &RequestLine{
-		RequestTarget: target,
-		HttpVersion:   "1.1",
-		Method:        method,
-	}, len(str), nil
-}
-
 func (r *Request) parse(data []byte) (int, error) {
+	totalBytesParsed := 0
+	for totalBytesParsed < len(data) && r.State != requestStateDone {
+		parsedCount, err := r.parseSingleLine(data[totalBytesParsed:])
+		if err != nil || parsedCount == 0 {
+			return totalBytesParsed, err
+		}
+		totalBytesParsed += parsedCount
+	}
+	return totalBytesParsed, nil
+}
+
+func (r *Request) parseSingleLine(data []byte) (int, error) {
 	switch r.State {
-	case Initialized:
+	case requestStateInitialized:
 		rq, count, err := parseRequestLine(data)
 		if err != nil {
 			return 0, err
@@ -120,9 +99,22 @@ func (r *Request) parse(data []byte) (int, error) {
 			return 0, nil
 		}
 		r.RequestLine = *rq
-		r.State = Done
+		r.State = requestStateParsingHeaders
 		return count, nil
-	case Done:
+	case requestStateParsingHeaders:
+		count, done, err := r.Headers.Parse(data)
+		if err != nil {
+			return 0, err
+		}
+		if count == 0 {
+			return 0, nil
+		}
+		if done {
+			r.State = requestStateDone
+			return 2, nil
+		}
+		return count, nil
+	case requestStateDone:
 		return 0, errors.New("trying to read data from done state")
 	default:
 		return 0, errors.New("unknown state")
