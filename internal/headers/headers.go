@@ -4,7 +4,6 @@ package headers
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"strings"
 )
 
@@ -48,12 +47,28 @@ func parseEntryFromString(str []byte) (string, string, error) {
 	}
 
 	key := str[:colonIdx]
-	if bytes.Contains(key, []byte(ws)) {
+	if !validateHeaderKey(string(key)) {
 		return "", "", errors.New("invalid header key")
 	}
 
 	val := strings.TrimSpace(string(str[colonIdx+1:]))
-	fmt.Printf("%s - %s", key, val)
 
 	return string(key), val, nil
+}
+
+func validateHeaderKey(str string) bool {
+	for _, ch := range str {
+		switch ch {
+		case '!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~':
+			continue
+		default:
+			if (ch >= 'A' && ch <= 'Z') ||
+				(ch >= 'a' && ch <= 'z') ||
+				(ch >= '0' && ch <= '9') {
+				continue
+			}
+			return false
+		}
+	}
+	return true
 }
