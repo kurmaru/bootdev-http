@@ -4,6 +4,7 @@ package request
 import (
 	"errors"
 	"io"
+	"strconv"
 
 	"github.com/kurmaru/bootdev-http/internal/headers"
 )
@@ -17,14 +18,16 @@ type RequestState int
 
 const (
 	requestStateInitialized RequestState = iota
-	requestStateDone
 	requestStateParsingHeaders
+	requestStateParsingBody
+	requestStateDone
 )
 
 type Request struct {
-	Headers     headers.Headers
-	RequestLine RequestLine
 	State       RequestState
+	RequestLine RequestLine
+	Headers     headers.Headers
+	Body        []byte
 }
 
 type RequestLine struct {
@@ -51,6 +54,20 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		count, err := reader.Read(curBuf[readToIdx:])
 		if err != nil {
 			if errors.Is(err, io.EOF) {
+				req.Body = append(req.Body, curBuf[:readToIdx]...)
+				contentLength, ok := req.Headers.Get("content-length")
+				if !ok && readToIdx > 0 {
+					return nil, errors.New("body exist without content-length header")
+				}
+				if ok {
+					bodyLength, err := strconv.Atoi(contentLength)
+					if err != nil {
+						return nil, err
+					}
+					if readToIdx != bodyLength {
+						return nil, errors.New("body length does not match content-length header")
+					}
+				}
 				req.State = requestStateDone
 			} else {
 				return nil, err
@@ -110,10 +127,12 @@ func (r *Request) parseSingleLine(data []byte) (int, error) {
 			return 0, nil
 		}
 		if done {
-			r.State = requestStateDone
+			r.State = requestStateParsingBody
 			return 2, nil
 		}
 		return count, nil
+	case requestStateParsingBody:
+		return 0, nil
 	case requestStateDone:
 		return 0, errors.New("trying to read data from done state")
 	default:

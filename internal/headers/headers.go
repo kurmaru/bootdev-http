@@ -76,10 +76,14 @@ func validateHeaderKey(str string) bool {
 func (h Headers) Set(key, val string) {
 	key = strings.ToLower(key)
 	cur, ok := h[key]
-	if !ok {
+	if ok {
+		h[key] = cur + ", " + val
+	} else {
 		h[key] = val
-		return
 	}
+}
 
-	h[key] = cur + ", " + val
+func (h Headers) Get(key string) (string, bool) {
+	val, ok := h[strings.ToLower(key)]
+	return val, ok
 }
