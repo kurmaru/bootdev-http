@@ -38,5 +38,6 @@ func main() {
 		for key, val := range req.Headers {
 			fmt.Printf("- %v: %v\n", key, val)
 		}
+		fmt.Printf("Body:\n%s\n", req.Body)
 	}
 }
