@@ -183,6 +183,7 @@ func TestBodyParser(t *testing.T) {
 	require.Error(t, err)
 
 	// Test: No content length but body exist
+	// Assume that there is no body, skip the parse
 	reader = &chunkReader{
 		data: "POST /submit HTTP/1.1\r\n" +
 			"Host: localhost:42069\r\n" +
@@ -190,6 +191,7 @@ func TestBodyParser(t *testing.T) {
 			"partial content",
 		numBytesPerRead: 3,
 	}
-	_, err = RequestFromReader(reader)
-	require.Error(t, err)
+	r, err = RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
 }

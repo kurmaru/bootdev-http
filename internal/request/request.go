@@ -3,6 +3,7 @@ package request
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"strconv"
 
@@ -24,10 +25,11 @@ const (
 )
 
 type Request struct {
-	State       RequestState
-	RequestLine RequestLine
-	Headers     headers.Headers
-	Body        []byte
+	State          RequestState
+	RequestLine    RequestLine
+	Headers        headers.Headers
+	Body           []byte
+	bodyLengthRead int
 }
 
 type RequestLine struct {
@@ -54,28 +56,17 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		count, err := reader.Read(curBuf[readToIdx:])
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				req.Body = append(req.Body, curBuf[:readToIdx]...)
-				contentLength, ok := req.Headers.Get("content-length")
-				if !ok && readToIdx > 0 {
-					return nil, errors.New("body exist without content-length header")
+				if req.State != requestStateDone {
+					return nil, errors.New("get EOF in middle of parsing")
 				}
-				if ok {
-					bodyLength, err := strconv.Atoi(contentLength)
-					if err != nil {
-						return nil, err
-					}
-					if readToIdx != bodyLength {
-						return nil, errors.New("body length does not match content-length header")
-					}
-				}
-				req.State = requestStateDone
+				break
 			} else {
 				return nil, err
 			}
 		}
 		readToIdx += count
 
-		parsedCount, err := req.parse(curBuf)
+		parsedCount, err := req.parse(curBuf[:readToIdx])
 		if err != nil {
 			return nil, err
 		}
@@ -95,7 +86,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 
 func (r *Request) parse(data []byte) (int, error) {
 	totalBytesParsed := 0
-	for totalBytesParsed < len(data) && r.State != requestStateDone {
+	for r.State != requestStateDone {
 		parsedCount, err := r.parseSingleLine(data[totalBytesParsed:])
 		if err != nil || parsedCount == 0 {
 			return totalBytesParsed, err
@@ -123,16 +114,30 @@ func (r *Request) parseSingleLine(data []byte) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		if count == 0 {
-			return 0, nil
-		}
 		if done {
 			r.State = requestStateParsingBody
-			return 2, nil
 		}
 		return count, nil
 	case requestStateParsingBody:
-		return 0, nil
+		contentLenStr, ok := r.Headers.Get("Content-Length")
+		if !ok {
+			// assume that if no content-length header is present, there is no body
+			r.State = requestStateDone
+			return len(data), nil
+		}
+		contentLen, err := strconv.Atoi(contentLenStr)
+		if err != nil {
+			return 0, fmt.Errorf("malformed Content-Length: %s", err)
+		}
+		r.Body = append(r.Body, data...)
+		r.bodyLengthRead += len(data)
+		if r.bodyLengthRead > contentLen {
+			return 0, fmt.Errorf("Content-Length too large")
+		}
+		if r.bodyLengthRead == contentLen {
+			r.State = requestStateDone
+		}
+		return len(data), nil
 	case requestStateDone:
 		return 0, errors.New("trying to read data from done state")
 	default:
