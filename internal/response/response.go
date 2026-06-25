@@ -19,16 +19,17 @@ const (
 )
 
 func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
-	statusLine := fmt.Sprintf("HTTP/1.1 %v ", statusCode)
+	reason := ""
 	switch statusCode {
 	case OK:
-		statusLine += "OK"
+		reason = "OK"
 	case BadRequest:
-		statusLine += "Bad Request"
+		reason = "Bad Request"
 	case InternalServerError:
-		statusLine += "Internal Server Error"
+		reason = "Internal Server Error"
 	}
-	statusLine += "\r\n"
+
+	statusLine := fmt.Sprintf("HTTP/1.1 %v %v\r\n", statusCode, reason)
 	_, err := w.Write([]byte(statusLine))
 	return err
 }
