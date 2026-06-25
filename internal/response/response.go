@@ -42,14 +42,14 @@ func GetDefaultHeaders(contentLen int) headers.Headers {
 }
 
 func WriteHeaders(w io.Writer, headers headers.Headers) error {
-	var strBuilder strings.Builder
+	var str strings.Builder
 
 	for key, val := range headers {
-		strBuilder.Write(fmt.Appendf(nil, "%v: %v\r\n", key, val))
+		fmt.Fprintf(&str, "%v: %v\r\n", key, val)
 	}
-	strBuilder.Write([]byte("\r\n"))
+	str.Write([]byte("\r\n"))
 
-	_, err := w.Write([]byte(strBuilder.String()))
+	_, err := w.Write([]byte(str.String()))
 	if err != nil {
 		return err
 	}
