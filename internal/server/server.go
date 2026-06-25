@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 	"sync/atomic"
+
+	"github.com/kurmaru/bootdev-http/internal/response"
 )
 
 type Server struct {
@@ -53,10 +55,13 @@ func (s *Server) listen() {
 func (s *Server) handle(conn net.Conn) {
 	defer conn.Close()
 
-	response := "HTTP/1.1 200 OK\r\n" + // Status line
-		"Content-Type: text/plain\r\n" + // Example header
-		"Content-Length: 13\r\n" + // Content length header
-		"\r\n" + // Blank line to separate headers from the body
-		"Hello World!\n" // Body
-	conn.Write([]byte(response))
+	err := response.WriteStatusLine(conn, 200)
+	if err != nil {
+		fmt.Printf("failed to write status line: %v\n", err)
+		return
+	}
+	err = response.WriteHeaders(conn, response.GetDefaultHeaders(0))
+	if err != nil {
+		fmt.Printf("failed to write headers: %v\n", err)
+	}
 }
