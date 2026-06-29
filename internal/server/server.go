@@ -2,10 +2,12 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"sync/atomic"
 
+	"github.com/kurmaru/bootdev-http/internal/request"
 	"github.com/kurmaru/bootdev-http/internal/response"
 )
 
@@ -14,7 +16,7 @@ type Server struct {
 	closed   atomic.Bool
 }
 
-func Serve(port int) (*Server, error) {
+func Serve(port int, h Handler) (*Server, error) {
 	l, err := net.Listen("tcp", ":42069")
 	if err != nil {
 		return nil, err
@@ -24,7 +26,7 @@ func Serve(port int) (*Server, error) {
 		listener: l,
 	}
 
-	go s.listen()
+	go s.listen(h)
 
 	return &s, nil
 }
@@ -37,7 +39,7 @@ func (s *Server) Close() error {
 	return nil
 }
 
-func (s *Server) listen() {
+func (s *Server) listen(h Handler) {
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
@@ -48,20 +50,41 @@ func (s *Server) listen() {
 			continue
 		}
 
-		go s.handle(conn)
+		go s.handle(conn, h)
 	}
 }
 
-func (s *Server) handle(conn net.Conn) {
+func (s *Server) handle(conn net.Conn, h Handler) {
 	defer conn.Close()
 
-	err := response.WriteStatusLine(conn, 200)
+	req, err := request.RequestFromReader(conn)
 	if err != nil {
-		fmt.Printf("failed to write status line: %v\n", err)
+		fmt.Printf("Parse from connection failed: %v\n", err)
 		return
 	}
-	err = response.WriteHeaders(conn, response.GetDefaultHeaders(0))
-	if err != nil {
-		fmt.Printf("failed to write headers: %v\n", err)
+
+	buf := new(bytes.Buffer)
+	handlerErr := h(buf, *req)
+	if handlerErr != nil {
+		if err := WriteError(conn, handlerErr); err != nil {
+			fmt.Printf("Write to connection failed: %v\n", err)
+			return
+		}
+		return
+	}
+
+	if err := response.WriteStatusLine(conn, response.OK); err != nil {
+		fmt.Printf("Write status line to connection failed: %v\n", err)
+		return
+	}
+
+	if err := response.WriteHeaders(conn, response.GetDefaultHeaders(buf.Len())); err != nil {
+		fmt.Printf("Write status line to connection failed: %v\n", err)
+		return
+	}
+
+	if err := response.WriteBody(conn, buf.Bytes()); err != nil {
+		fmt.Printf("Write body to connection failed: %v\n", err)
+		return
 	}
 }
