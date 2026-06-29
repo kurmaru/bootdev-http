@@ -61,7 +61,13 @@ func (s *Server) handle(conn net.Conn) {
 
 	req, err := request.RequestFromReader(conn)
 	if err != nil {
-		fmt.Printf("Parse from connection failed: %v\n", err)
+		hErr := HandlerError{
+			Code:    response.BadRequest,
+			Message: fmt.Sprintf("Parse from connection failed: %v\n", err),
+		}
+		if err := hErr.Write(conn); err != nil {
+			fmt.Printf("Failed to respond error: %v", err)
+		}
 		return
 	}
 
