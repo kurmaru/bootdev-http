@@ -12,11 +12,12 @@ import (
 )
 
 type Server struct {
+	handler  Handler
 	listener net.Listener
 	closed   atomic.Bool
 }
 
-func Serve(port int, h Handler) (*Server, error) {
+func Serve(port int, handler Handler) (*Server, error) {
 	l, err := net.Listen("tcp", ":42069")
 	if err != nil {
 		return nil, err
@@ -24,9 +25,10 @@ func Serve(port int, h Handler) (*Server, error) {
 
 	s := Server{
 		listener: l,
+		handler:  handler,
 	}
 
-	go s.listen(h)
+	go s.listen()
 
 	return &s, nil
 }
@@ -39,7 +41,7 @@ func (s *Server) Close() error {
 	return nil
 }
 
-func (s *Server) listen(h Handler) {
+func (s *Server) listen() {
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
@@ -50,11 +52,11 @@ func (s *Server) listen(h Handler) {
 			continue
 		}
 
-		go s.handle(conn, h)
+		go s.handle(conn)
 	}
 }
 
-func (s *Server) handle(conn net.Conn, h Handler) {
+func (s *Server) handle(conn net.Conn) {
 	defer conn.Close()
 
 	req, err := request.RequestFromReader(conn)
@@ -64,7 +66,7 @@ func (s *Server) handle(conn net.Conn, h Handler) {
 	}
 
 	buf := new(bytes.Buffer)
-	handlerErr := h(buf, *req)
+	handlerErr := s.handler(buf, *req)
 	if handlerErr != nil {
 		if err := WriteError(conn, handlerErr); err != nil {
 			fmt.Printf("Write to connection failed: %v\n", err)
