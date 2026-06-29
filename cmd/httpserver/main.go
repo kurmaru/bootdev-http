@@ -139,7 +139,7 @@ func proxyHandler(w response.Writer, req request.Request) {
 		n, err := proxReq.Body.Read(buf)
 		if n > 0 {
 			fmt.Printf("Read %v bytes\n", n)
-			w.WriteChunkedBody(buf)
+			w.WriteChunkedBody(buf[:n])
 		}
 
 		if err != nil {
