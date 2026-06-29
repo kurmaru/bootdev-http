@@ -87,3 +87,9 @@ func (h Headers) Get(key string) (string, bool) {
 	val, ok := h[strings.ToLower(key)]
 	return val, ok
 }
+
+// WriteHeaders override the key instead of append to the existed values
+func (h Headers) WriteHeaders(key string, val string) {
+	key = strings.ToLower(key)
+	h[key] = val
+}

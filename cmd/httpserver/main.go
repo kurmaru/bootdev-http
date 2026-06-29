@@ -1,10 +1,10 @@
 package main
 
 import (
-	"io"
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"github.com/kurmaru/bootdev-http/internal/request"
@@ -28,20 +28,56 @@ func main() {
 	log.Println("Server gracefully stopped")
 }
 
-func handler(w io.Writer, req request.Request) *server.HandlerError {
+func handler(w response.Writer, req request.Request) {
+	statusCode := response.OK
+	var content []byte
+	headers := response.GetDefaultHeaders(0)
+
 	switch req.RequestLine.RequestTarget {
 	case "/yourproblem":
-		return &server.HandlerError{
-			Code:    response.BadRequest,
-			Message: "Your problem is not my problem\n",
-		}
+		statusCode = response.BadRequest
+		content = []byte(`
+		<html>
+			<head>
+				<title>400 Bad Request</title>
+			</head>
+			<body>
+				<h1>Bad Request</h1>
+				<p>Your request honestly kinda sucked.</p>
+			</body>
+		</html>
+		`)
 	case "/myproblem":
-		return &server.HandlerError{
-			Code:    response.InternalServerError,
-			Message: "Woopsie, my bad\n",
-		}
+		statusCode = response.InternalServerError
+		content = []byte(`
+		<html>
+			<head>
+				<title>500 Internal Server Error</title>
+			</head>
+			<body>
+				<h1>Internal Server Error</h1>
+				<p>Okay, you know what? This one is on me.</p>
+			</body>
+		</html>
+		`)
 	default:
-		w.Write([]byte("All good, frfr\n"))
-		return nil
+		content = []byte(`
+		<html>
+			<head>
+				<title>200 OK</title>
+			</head>
+			<body>
+				<h1>Success!</h1>
+				<p>Your request was an absolute banger.</p>
+			</body>
+		</html>
+		`)
 	}
+
+	headers.WriteHeaders("Content-Length", strconv.Itoa(len(content)))
+	headers.WriteHeaders("Content-Type", "text/html")
+
+	w.WriteStatusLine(statusCode)
+	w.WriteHeaders(headers)
+	w.WriteBody(content)
 }

@@ -2,7 +2,6 @@
 package server
 
 import (
-	"bytes"
 	"fmt"
 	"net"
 	"sync/atomic"
@@ -59,30 +58,17 @@ func (s *Server) listen() {
 func (s *Server) handle(conn net.Conn) {
 	defer conn.Close()
 
+	res := response.NewWriter(conn)
 	req, err := request.RequestFromReader(conn)
 	if err != nil {
-		hErr := HandlerError{
-			Code:    response.BadRequest,
-			Message: fmt.Sprintf("Parse from connection failed: %v\n", err),
-		}
-		if err := hErr.Write(conn); err != nil {
-			fmt.Printf("Failed to respond error: %v", err)
-		}
+		fmt.Printf("Failed to parse: %v", err)
+
+		body := fmt.Sprintf("Parse from connection failed: %v\n", err)
+		res.WriteStatusLine(response.BadRequest)
+		res.WriteHeaders(response.GetDefaultHeaders(len(body)))
+		res.WriteBody([]byte(body))
 		return
 	}
 
-	buf := new(bytes.Buffer)
-	handlerErr := s.handler(buf, *req)
-	if handlerErr != nil {
-		if err := handlerErr.Write(conn); err != nil {
-			fmt.Printf("Write to connection failed: %v\n", err)
-			return
-		}
-		return
-	}
-
-	if err := WriteResponse(conn, buf.Bytes(), response.OK); err != nil {
-		fmt.Printf("Write response to connection failed: %v\n", err)
-		return
-	}
+	s.handler(*res, *req)
 }
