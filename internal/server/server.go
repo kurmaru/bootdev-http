@@ -68,25 +68,15 @@ func (s *Server) handle(conn net.Conn) {
 	buf := new(bytes.Buffer)
 	handlerErr := s.handler(buf, *req)
 	if handlerErr != nil {
-		if err := WriteError(conn, handlerErr); err != nil {
+		if err := handlerErr.WriteError(conn); err != nil {
 			fmt.Printf("Write to connection failed: %v\n", err)
 			return
 		}
 		return
 	}
 
-	if err := response.WriteStatusLine(conn, response.OK); err != nil {
-		fmt.Printf("Write status line to connection failed: %v\n", err)
-		return
-	}
-
-	if err := response.WriteHeaders(conn, response.GetDefaultHeaders(buf.Len())); err != nil {
-		fmt.Printf("Write status line to connection failed: %v\n", err)
-		return
-	}
-
-	if err := response.WriteBody(conn, buf.Bytes()); err != nil {
-		fmt.Printf("Write body to connection failed: %v\n", err)
+	if err := WriteResponse(conn, buf.Bytes(), response.OK); err != nil {
+		fmt.Printf("Write response to connection failed: %v\n", err)
 		return
 	}
 }
