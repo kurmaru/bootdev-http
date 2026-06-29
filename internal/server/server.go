@@ -68,7 +68,7 @@ func (s *Server) handle(conn net.Conn) {
 	buf := new(bytes.Buffer)
 	handlerErr := s.handler(buf, *req)
 	if handlerErr != nil {
-		if err := handlerErr.WriteError(conn); err != nil {
+		if err := handlerErr.Write(conn); err != nil {
 			fmt.Printf("Write to connection failed: %v\n", err)
 			return
 		}

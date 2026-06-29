@@ -15,7 +15,7 @@ type HandlerError struct {
 
 type Handler func(w io.Writer, req request.Request) *HandlerError
 
-func (handlerErr *HandlerError) WriteError(w io.Writer) error {
+func (handlerErr *HandlerError) Write(w io.Writer) error {
 	str := fmt.Sprintf(`%v`, handlerErr.Message)
 	return WriteResponse(w, []byte(str), handlerErr.Code)
 }
