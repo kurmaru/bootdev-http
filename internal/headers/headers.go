@@ -93,3 +93,8 @@ func (h Headers) WriteHeaders(key string, val string) {
 	key = strings.ToLower(key)
 	h[key] = val
 }
+
+func (h Headers) Delete(key string) {
+	key = strings.ToLower(key)
+	delete(h, key)
+}
