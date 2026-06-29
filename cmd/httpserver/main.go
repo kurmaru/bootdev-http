@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
@@ -52,7 +54,7 @@ func handler(w response.Writer, req request.Request) {
 func internalHandlers(w response.Writer, req request.Request) {
 	statusCode := response.OK
 	var content []byte
-	headers := response.GetDefaultHeaders(0)
+	h := response.GetDefaultHeaders(0)
 
 	switch req.RequestLine.RequestTarget {
 	case "/yourproblem":
@@ -95,11 +97,11 @@ func internalHandlers(w response.Writer, req request.Request) {
 		`)
 	}
 
-	headers.WriteHeaders("Content-Length", strconv.Itoa(len(content)))
-	headers.WriteHeaders("Content-Type", "text/html")
+	h.WriteHeaders("Content-Length", strconv.Itoa(len(content)))
+	h.WriteHeaders("Content-Type", "text/html")
 
 	w.WriteStatusLine(statusCode)
-	w.WriteHeaders(headers)
+	w.WriteHeaders(h)
 	w.WriteBody(content)
 }
 
@@ -119,16 +121,21 @@ func proxyHandler(w response.Writer, req request.Request) {
 		return
 	}
 
-	headers := headers.NewHeaders()
-	for h, vals := range proxReq.Header {
+	h := headers.NewHeaders()
+	for key, vals := range proxReq.Header {
 		if len(vals) > 0 {
-			headers.WriteHeaders(h, vals[0])
+			h.WriteHeaders(key, vals[0])
 		}
 	}
-	headers.Delete("Content-Length")
-	headers.WriteHeaders("Transfer-Encoding", "chunked")
+	h.Delete("Content-Length")
+	h.Set("connection", "close")
+	h.WriteHeaders("Transfer-Encoding", "chunked")
+	h.WriteHeaders("Trailer", "X-Content-SHA256")
+	h.Set("Trailer", "X-Content-Length")
 
-	if err := w.WriteHeaders(headers); err != nil {
+	body := make([]byte, 0, 1024)
+
+	if err := w.WriteHeaders(h); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -139,6 +146,7 @@ func proxyHandler(w response.Writer, req request.Request) {
 		n, err := proxReq.Body.Read(buf)
 		if n > 0 {
 			fmt.Printf("Read %v bytes\n", n)
+			body = append(body, buf[:n]...)
 			w.WriteChunkedBody(buf[:n])
 		}
 
@@ -146,16 +154,20 @@ func proxyHandler(w response.Writer, req request.Request) {
 			if err == io.EOF {
 				break
 			}
-
-			body := fmt.Sprintf("Failed to read response: %v", err)
-			w.WriteStatusLine(response.InternalServerError)
-			w.WriteHeaders(response.GetDefaultHeaders(len(body)))
-			w.WriteBody([]byte(body))
+			fmt.Printf("Failed to read response: %v", err)
 			return
 		}
 	}
 
-	if _, err := w.WriteChunkedBodyDone(); err != nil {
-		fmt.Printf("Failed to write chunk done: %v\n", err)
+	// Body have a whitespace in the end
+	body = body[:len(body)-1]
+	hash := sha256.Sum256(body)
+
+	trailers := headers.NewHeaders()
+	trailers.WriteHeaders("X-Content-SHA256", hex.EncodeToString(hash[:]))
+	trailers.WriteHeaders("X-Content-Length", strconv.Itoa(len(body)))
+
+	if err := w.WriteTrailer(trailers); err != nil {
+		fmt.Printf("Failed to write trailers: %v\n", err)
 	}
 }

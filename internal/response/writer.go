@@ -14,6 +14,7 @@ const (
 	statusLineState WriterState = "status line"
 	headersState    WriterState = "headers"
 	bodyState       WriterState = "body"
+	trailersState   WriterState = "trailers"
 	doneState       WriterState = "done"
 )
 
@@ -76,6 +77,5 @@ func (w *Writer) WriteBody(p []byte) (int, error) {
 		return 0, fmt.Errorf("invalid state - expect: %v - got %v", bodyState, w.state)
 	}
 
-	w.state = doneState
 	return w.writer.Write(p)
 }
