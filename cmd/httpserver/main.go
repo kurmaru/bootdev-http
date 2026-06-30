@@ -51,12 +51,20 @@ func handler(w response.Writer, req request.Request) {
 	internalHandlers(w, req)
 }
 
-func internalHandlers(w response.Writer, req request.Request) {
+func internalHandlers(w response.Writer, r request.Request) {
+	if r.RequestLine.RequestTarget == "/video" && r.RequestLine.Method == "GET" {
+		videoHandler(w, r)
+		return
+	}
+	htmlHandler(w, r)
+}
+
+func htmlHandler(w response.Writer, r request.Request) {
 	statusCode := response.OK
 	var content []byte
 	h := response.GetDefaultHeaders(0)
 
-	switch req.RequestLine.RequestTarget {
+	switch r.RequestLine.RequestTarget {
 	case "/yourproblem":
 		statusCode = response.BadRequest
 		content = []byte(`
@@ -170,4 +178,29 @@ func proxyHandler(w response.Writer, req request.Request) {
 	if err := w.WriteTrailer(trailers); err != nil {
 		fmt.Printf("Failed to write trailers: %v\n", err)
 	}
+}
+
+func videoHandler(w response.Writer, r request.Request) {
+	file, err := os.Open("assets/vim.mp4")
+	if err != nil {
+		body := fmt.Sprintf("Failed to open asset: %v", err)
+		w.WriteStatusLine(response.InternalServerError)
+		w.WriteHeaders(response.GetDefaultHeaders(len(body)))
+		w.WriteBody([]byte(body))
+		return
+	}
+	defer file.Close()
+	buf, err := io.ReadAll(file)
+	if err != nil {
+		fmt.Printf("Failed to read file: %v", err)
+		return
+	}
+
+	w.WriteStatusLine(response.OK)
+
+	h := response.GetDefaultHeaders(len(buf))
+	h.WriteHeaders("Content-Type", "video/mp4")
+	w.WriteHeaders(h)
+
+	w.WriteBody(buf)
 }
